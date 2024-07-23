@@ -47,12 +47,18 @@
          connect/1,
          pub/1,
          pub/3,
+         hpub/1,
+         hpub/3,
+         hpub/4,
          sub/2,
          sub/3,
          unsub/1,
          unsub/2,
          msg/2,
-         msg/4]).
+         msg/4,
+         hmsg/2,
+         hmsg/4,
+         hmsg/5]).
 
 -define(SEP, <<" ">>).
 -define(NL, <<"\r\n">>).
@@ -109,6 +115,13 @@ pub(Subject) ->
 pub(Subject, ReplyTo, Payload) ->
     encode({pub, {Subject, ReplyTo, Payload}}).
 
+hpub(Subject) ->
+    encode({hpub, {Subject, undefined, <<>>, <<>>}}).
+hpub(Subject, Header, Payload) ->
+    encode({hpub, {Subject, undefined, Header, Payload}}).
+hpub(Subject, ReplyTo, Header, Payload) ->
+    encode({hpub, {Subject, ReplyTo, Header, Payload}}).
+
 sub(Subject, Sid) ->
     encode({sub, {Subject, undefined, Sid}}).
 sub(Subject, QueueGrp, Sid) ->
@@ -123,6 +136,13 @@ msg(Subject, Sid) ->
     encode({msg, {Subject, Sid, undefined, <<>>}}).
 msg(Subject, Sid, ReplyTo, Payload) ->
     encode({msg, {Subject, Sid, ReplyTo, Payload}}).
+
+hmsg(Subject, Sid) ->
+    encode({hmsg, {Subject, Sid, undefined, <<>>}}).
+hmsg(Subject, Sid, Header, Payload) ->
+    encode({hmsg, {Subject, Sid, undefined, Header, Payload}}).
+hmsg(Subject, Sid, ReplyTo, Header, Payload) ->
+    encode({hmsg, {Subject, Sid, ReplyTo, Header, Payload}}).
 
 -spec encode(Param :: encode_param()) -> iolist().
 
@@ -150,6 +170,18 @@ encode({pub, {Subject, ReplyTo, Payload}}) ->
     [<<"PUB ">>, Subject, <<" ">>, ReplyTo, <<" ">>, BinPS, <<"\r\n">>,
       Payload, <<"\r\n">>];
 
+encode({hpub, {Subject, undefined, Header, Payload}}) ->
+    BinHdrS = integer_to_binary(iolist_size(Header) + 2),
+    BinPS = integer_to_binary(iolist_size(Header) + 2 + iolist_size(Payload)),
+    [<<"HPUB ">>, Subject, <<" ">>, BinHdrS, <<" ">>, BinPS, <<"\r\n">>,
+      Header, <<"\r\n">>, Payload, <<"\r\n">>];
+
+encode({hpub, {Subject, ReplyTo, Header, Payload}}) ->
+    BinHdrS = integer_to_binary(iolist_size(Header) + 2),
+    BinPS = integer_to_binary(iolist_size(Header) + 2 + iolist_size(Payload)),
+    [<<"HPUB ">>, Subject, <<" ">>, ReplyTo, <<" ">>, BinHdrS, <<" ">>, BinPS, <<"\r\n">>,
+      Header, <<"\r\n">>, Payload, <<"\r\n">>];
+
 encode({sub, {Subject, undefined, Sid}}) ->
     [<<"SUB ">>, Subject, <<" ">>, Sid, <<"\r\n">>];
 
@@ -171,7 +203,19 @@ encode({msg, {Subject, Sid, undefined, Payload}}) ->
 encode({msg, {Subject, Sid, ReplyTo, Payload}}) ->
     BinPS = integer_to_binary(iolist_size(Payload)),
     [<<"MSG ">>, Subject, <<" ">>, Sid, <<" ">>, ReplyTo, <<" ">>, BinPS, <<"\r\n">>,
-      Payload, <<"\r\n">>].
+      Payload, <<"\r\n">>];
+
+encode({hmsg, {Subject, Sid, undefined, Header, Payload}}) ->
+    BinHdrS = integer_to_binary(iolist_size(Header) + 2),
+    BinPS = integer_to_binary(iolist_size(Header) + 2 + iolist_size(Payload)),
+    [<<"HMSG ">>, Subject, <<" ">>, Sid, <<" ">>, BinHdrS, <<" ">>, BinPS, <<"\r\n">>,
+      Header, <<"\r\n">>, Payload, <<"\r\n">>];
+
+encode({hmsg, {Subject, Sid, ReplyTo, Header, Payload}}) ->
+    BinHdrS = integer_to_binary(iolist_size(Header) + 2),
+    BinPS = integer_to_binary(iolist_size(Header) + 2 + iolist_size(Payload)),
+    [<<"HMSG ">>, Subject, <<" ">>, Sid, <<" ">>, ReplyTo, <<" ">>, BinHdrS, <<" ">>, BinPS, <<"\r\n">>,
+      Header, <<"\r\n">>, Payload, <<"\r\n">>].
 
 % == Decode API
 
@@ -259,6 +303,35 @@ decode(<<"MSG ", Rest/binary>> = OrigMsg, CbFunState) ->
             throw(parse_error)
     end;
 
+decode(<<"HMSG ", Rest/binary>> = OrigMsg, CbFunState) ->
+    case parts(Rest) of
+        [L5, L4, L3, L2, L1] ->
+            <<Subject:L1/bytes, " ", Sid:L2/bytes, " ", ReplyTo:L3/bytes, " ",
+              BinHdrS:L4/bytes, " ", BinTotS:L5/bytes, "\r\n", More/binary>> = Rest,
+            HdrS = binary_to_integer(BinHdrS) - 2,
+            PS = binary_to_integer(BinTotS) - HdrS - 2,
+            case More of
+                <<Header:HdrS/bytes, "\r\n", Payload:PS/binary, "\r\n", Next/binary>> ->
+                    decode_cont(Next, CbFunState, {hmsg, {Subject, Sid, ReplyTo, Header, Payload}});
+                _ ->
+                    decode_cont(OrigMsg, CbFunState, stop)
+            end;
+        [L4, L3, L2, L1] ->
+            <<Subject:L1/bytes, " ", Sid:L2/bytes, " ",
+              BinHdrS:L3/bytes, " ", BinTotS:L4/bytes, "\r\n", More/binary>> = Rest,
+            HdrS = binary_to_integer(BinHdrS) - 2,
+            PS = binary_to_integer(BinTotS) - HdrS - 2,
+            case More of
+                <<Header:HdrS/bytes, "\r\n", Payload:PS/binary, "\r\n", Next/binary>> ->
+                    decode_cont(Next, CbFunState, {hmsg, {Subject, Sid, undefined, Header, Payload}});
+                _ ->
+                    decode_cont(OrigMsg, CbFunState, stop)
+            end;
+        eof ->
+            decode_cont(OrigMsg, CbFunState, stop);
+        _ ->
+            throw(parse_error)
+    end;
 decode(<<"PUB ", Rest/binary>> = OrigMsg, CbFunState) ->
     case parts(Rest) of
         [L3, L2, L1] ->
@@ -276,6 +349,34 @@ decode(<<"PUB ", Rest/binary>> = OrigMsg, CbFunState) ->
             case More of
                 <<Payload:PS/binary, "\r\n", Next/binary>> ->
                     decode_cont(Next, CbFunState, {pub, {Subject, undefined, Payload}});
+                _ ->
+                    decode_cont(OrigMsg, CbFunState, stop)
+            end;
+        eof ->
+            decode_cont(OrigMsg, CbFunState, stop);
+        _ ->
+            throw(parse_error)
+    end;
+
+decode(<<"HPUB ", Rest/binary>> = OrigMsg, CbFunState) ->
+    case parts(Rest) of
+        [L4, L3, L2, L1] ->
+            <<Subject:L1/bytes, " ", ReplyTo:L2/bytes, " ", BinHdrS:L3/bytes, " ", BinTotS:L4/bytes, "\r\n", More/binary>> = Rest,
+            HdrS = binary_to_integer(BinHdrS) - 2,
+            PS = binary_to_integer(BinTotS) - HdrS - 2,
+            case More of
+                <<Header:HdrS/bytes, "\r\n", Payload:PS/binary, "\r\n", Next/binary>> ->
+                    decode_cont(Next, CbFunState, {hpub, {Subject, ReplyTo, Header, Payload}});
+                _ ->
+                    decode_cont(OrigMsg, CbFunState, stop)
+            end;
+        [L3, L2, L1] ->
+            <<Subject:L1/bytes, " ", BinHdrS:L2/bytes, " ", BinTotS:L3/bytes, "\r\n", More/binary>> = Rest,
+            HdrS = binary_to_integer(BinHdrS) - 2,
+            PS = binary_to_integer(BinTotS) - HdrS - 2,
+            case More of
+                <<Header:HdrS/bytes, "\r\n", Payload:PS/binary, "\r\n", Next/binary>> ->
+                    decode_cont(Next, CbFunState, {hpub, {Subject, undefined, Header, Payload}});
                 _ ->
                     decode_cont(OrigMsg, CbFunState, stop)
             end;
@@ -400,6 +501,26 @@ pub_2_test() ->
     E = <<"PUB FRONT.DOOR INBOX.22 11\r\nKnock Knock\r\n">>,
     ?assertEqual(E, R).
 
+hpub_1_test() ->
+    R = iolist_to_binary(hpub(<<"FOO">>, <<"NATS/1.0\r\nBar: Baz\r\n">>, <<"Hello NATS!">>)),
+    E = <<"HPUB FOO 22 33\r\nNATS/1.0\r\nBar: Baz\r\n\r\nHello NATS!\r\n">>,
+    ?assertEqual(E, R).
+
+hpub_2_test() ->
+    R = iolist_to_binary(hpub(<<"FRONT.DOOR">>, <<"JOKE.22">>, <<"NATS/1.0\r\nBREAKFAST: donut\r\nLUNCH: burger\r\n">>, <<"Knock Knock">>)),
+    E = <<"HPUB FRONT.DOOR JOKE.22 45 56\r\nNATS/1.0\r\nBREAKFAST: donut\r\nLUNCH: burger\r\n\r\nKnock Knock\r\n">>,
+    ?assertEqual(E, R).
+
+hpub_3_test() ->
+    R = iolist_to_binary(hpub(<<"NOTIFY">>, <<"NATS/1.0\r\nBar: Baz\r\n">>,<<>>)),
+    E = <<"HPUB NOTIFY 22 22\r\nNATS/1.0\r\nBar: Baz\r\n\r\n\r\n">>,
+    ?assertEqual(E, R).
+
+hpub_4_test() ->
+    R = iolist_to_binary(hpub(<<"MORNING.MENU">>, <<"NATS/1.0\r\nBREAKFAST: donut\r\nBREAKFAST: eggs\r\n">>, <<"Yum!">>)),
+    E = <<"HPUB MORNING.MENU 47 51\r\nNATS/1.0\r\nBREAKFAST: donut\r\nBREAKFAST: eggs\r\n\r\nYum!\r\n">>,
+    ?assertEqual(E, R).
+
 sub_1_test() ->
     R = iolist_to_binary(sub(<<"FOO">>, <<"1">>)),
     E = <<"SUB FOO 1\r\n">>,
@@ -423,6 +544,20 @@ unsub_2_test() ->
 msg_4_test() ->
     R = iolist_to_binary(msg(<<"FOO.BAR">>, <<"9">>, <<"INBOX.34">>, <<"Hello, World!">>)),
     E = <<"MSG FOO.BAR 9 INBOX.34 13\r\nHello, World!\r\n">>,
+    ?assertEqual(E, R).
+
+hmsg_1_test() ->
+    R = iolist_to_binary(hmsg(<<"FOO.BAR">>, <<"9">>, undefined,
+                              <<"NATS/1.0\r\nFoodGroup: vegetable\r\n">>,
+                              <<"Hello World">>)),
+    E = <<"HMSG FOO.BAR 9 34 45\r\nNATS/1.0\r\nFoodGroup: vegetable\r\n\r\nHello World\r\n">>,
+    ?assertEqual(E, R).
+
+hmsg_2_test() ->
+    R = iolist_to_binary(hmsg(<<"FOO.BAR">>,<<"9">>,<<"BAZ.69">>,
+                              <<"NATS/1.0\r\nFoodGroup: vegetable\r\n">>,
+                              <<"Hello World">>)),
+    E = <<"HMSG FOO.BAR 9 BAZ.69 34 45\r\nNATS/1.0\r\nFoodGroup: vegetable\r\n\r\nHello World\r\n">>,
     ?assertEqual(E, R).
 
 %% == Decode Tests
@@ -467,6 +602,31 @@ dec_pub_3_test() ->
     E = {{pub, {<<"FRONT.DOOR">>, <<"INBOX.22">>, <<"Knock Knock">>}}, <<>>},
     ?assertEqual(E, R).
 
+dec_hpub_1_test() ->
+    R = decode(<<"HPUB FOO 22 33\r\nNATS/1.0\r\nBar: Baz\r\n\r\nHello NATS!\r\n">>),
+    E = {{hpub, {<<"FOO">>, undefined,
+                 <<"NATS/1.0\r\nBar: Baz\r\n">>, <<"Hello NATS!">>}}, <<>>},
+    ?assertEqual(E, R).
+
+dec_hpub_2_test() ->
+    R = decode(<<"HPUB FRONT.DOOR JOKE.22 45 56\r\nNATS/1.0\r\nBREAKFAST: donut\r\nLUNCH: burger\r\n\r\nKnock Knock\r\n">>),
+    E = {{hpub, {<<"FRONT.DOOR">>, <<"JOKE.22">>,
+                 <<"NATS/1.0\r\nBREAKFAST: donut\r\nLUNCH: burger\r\n">>,
+                 <<"Knock Knock">>}}, <<>>},
+    ?assertEqual(E, R).
+
+dec_hpub_3_test() ->
+    R = decode(<<"HPUB NOTIFY 22 22\r\nNATS/1.0\r\nBar: Baz\r\n\r\n\r\n">>),
+    E = {{hpub, {<<"NOTIFY">>, undefined,
+                 <<"NATS/1.0\r\nBar: Baz\r\n">>,<<>>}}, <<>>},
+    ?assertEqual(E, R).
+
+dec_hpub_4_test() ->
+    R = decode(<<"HPUB MORNING.MENU 47 51\r\nNATS/1.0\r\nBREAKFAST: donut\r\nBREAKFAST: eggs\r\n\r\nYum!\r\n">>),
+    E = {{hpub, {<<"MORNING.MENU">>, undefined,
+                 <<"NATS/1.0\r\nBREAKFAST: donut\r\nBREAKFAST: eggs\r\n">>, <<"Yum!">>}}, <<>>},
+    ?assertEqual(E, R).
+
 dec_sub_1_test() ->
     R = decode(<<"SUB FOO 1\r\n">>),
     E = {{sub, {<<"FOO">>, undefined, <<"1">>}}, <<>>},
@@ -495,6 +655,20 @@ dec_msg_1_test() ->
 dec_msg_2_test() ->
     R = decode(<<"MSG FOO.BAR 9 INBOX.34 13\r\nHello, World!\r\n">>),
     E = {{msg, {<<"FOO.BAR">>, <<"9">>, <<"INBOX.34">>, <<"Hello, World!">>}}, <<>>},
+    ?assertEqual(E, R).
+
+dec_hmsg_1_test() ->
+    R = decode(<<"HMSG FOO.BAR 9 34 45\r\nNATS/1.0\r\nFoodGroup: vegetable\r\n\r\nHello World\r\n">>),
+    E = {{hmsg, {<<"FOO.BAR">>, <<"9">>, undefined,
+                 <<"NATS/1.0\r\nFoodGroup: vegetable\r\n">>,
+                 <<"Hello World">>}}, <<>>},
+    ?assertEqual(E, R).
+
+dec_hmsg_2_test() ->
+    R = decode(<<"HMSG FOO.BAR 9 BAZ.69 34 45\r\nNATS/1.0\r\nFoodGroup: vegetable\r\n\r\nHello World\r\n">>),
+    E = {{hmsg, {<<"FOO.BAR">>,<<"9">>,<<"BAZ.69">>,
+                 <<"NATS/1.0\r\nFoodGroup: vegetable\r\n">>,
+                 <<"Hello World">>}}, <<>>},
     ?assertEqual(E, R).
 
 dec_many_lines_test() ->
