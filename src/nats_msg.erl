@@ -32,6 +32,7 @@
 
 -module(nats_msg).
 -author("Yuce Tekol").
+%% -compile([bin_opt_info]).
 
 -export([init/0,
          encode/1,
@@ -174,156 +175,176 @@ encode({msg, {Subject, Sid, ReplyTo, Payload}}) ->
 
 % == Decode API
 
+decode_single_msg_fun(stop, State) ->
+    {stop, State};
+decode_single_msg_fun(Ev, _) ->
+    {stop, Ev}.
+
+decode_all_msg_fun(stop, Acc) ->
+    {stop, lists:reverse(Acc)};
+decode_all_msg_fun(Ev, Acc) ->
+    {continue, [Ev|Acc]}.
+
 decode_all(Bin) ->
-    {RevMsgs, Rest} = decode_messages(Bin, []),
-    {lists:reverse(RevMsgs), Rest}.
+    decode(Bin, {fun decode_all_msg_fun/2, []}).
 
 -spec decode(Param :: iodata()) ->
     {term(), binary()}.
 
 decode(L) when is_list(L) ->
     decode(iolist_to_binary(L));
+decode(Bin) when is_binary(Bin) ->
+    decode(Bin, {fun decode_single_msg_fun/2, []}).
 
-decode(<<>>) -> <<>>;
-decode(<<"+OK\r\n", Rest/binary>>) -> {ok, Rest};
-decode(<<"PING\r\n", Rest/binary>>) -> {ping, Rest};
-decode(<<"PONG\r\n", Rest/binary>>) -> {pong, Rest};
-decode(<<"-ERR 'Unknown Protocol Operation'\r\n", Rest/binary>>) -> {{error, unknown_operation}, Rest};
-decode(<<"-ERR 'Authorization Violation'\r\n", Rest/binary>>) -> {{error, auth_violation}, Rest};
-decode(<<"-ERR 'Authorization Timeout'\r\n", Rest/binary>>) -> {{error, auth_timeout}, Rest};
-decode(<<"-ERR 'Parser Error'\r\n", Rest/binary>>) -> {{error, parser_error}, Rest};
-decode(<<"-ERR 'Stale Connection'\r\n", Rest/binary>>) -> {{error, stale_connection}, Rest};
-decode(<<"-ERR 'Slow Consumer'\r\n", Rest/binary>>) -> {{error, slow_consumer}, Rest};
-decode(<<"-ERR 'Maximum Payload Exceeded'\r\n", Rest/binary>>) -> {{error, max_payload}, Rest};
-decode(<<"-ERR 'Invalid Subject'\r\n", Rest/binary>>) -> {{error, invalid_subject}, Rest};
-decode(<<"MSG ", Rest/binary>> = OrigMsg) -> decode_slow(msg, OrigMsg, Rest);
-decode(<<"PUB ", Rest/binary>> = OrigMsg) -> decode_slow(pub, OrigMsg, Rest);
-decode(<<"SUB ", Rest/binary>> = OrigMsg) -> decode_slow(sub, OrigMsg, Rest);
-decode(<<"UNSUB ", Rest/binary>> = OrigMsg) -> decode_slow(unsub, OrigMsg, Rest);
-decode(<<"CONNECT ", Rest/binary>> = OrigMsg) -> decode_slow(connect, OrigMsg, Rest);
-decode(<<"INFO ", Rest/binary>> = OrigMsg) -> decode_slow(info, OrigMsg, Rest);
-decode(Other) -> {[], Other}.
+return(<<Rest/binary>>, State) ->
+    {State, Rest}.
+
+decode_cont(<<Rest/binary>>, {CbFun, CbState}, Ev) ->
+    case CbFun(Ev, CbState) of
+        {stop, NextState} ->
+            return(Rest, NextState);
+        {continue, NextState} ->
+            decode(Rest, {CbFun, NextState})
+    end.
+
+decode(<<_:0/binary>>, CbFunState) ->
+    decode_cont(<<>>, CbFunState, stop);
+decode(<<"+OK\r\n", Rest/binary>>, CbFunState) ->
+    decode_cont(Rest, CbFunState, ok);
+decode(<<"PING\r\n", Rest/binary>>, CbFunState) ->
+    decode_cont(Rest, CbFunState, ping);
+decode(<<"PONG\r\n", Rest/binary>>, CbFunState) ->
+    decode_cont(Rest, CbFunState, pong);
+
+decode(<<"-ERR 'Unknown Protocol Operation'\r\n", Rest/binary>>, CbFunState) ->
+    decode_cont(Rest, CbFunState, {error, unknown_operation});
+decode(<<"-ERR 'Authorization Violation'\r\n", Rest/binary>>, CbFunState) ->
+    decode_cont(Rest, CbFunState, {error, auth_violation});
+decode(<<"-ERR 'Authorization Timeout'\r\n", Rest/binary>>, CbFunState) ->
+    decode_cont(Rest, CbFunState, {error, auth_timeout});
+decode(<<"-ERR 'Parser Error'\r\n", Rest/binary>>, CbFunState) ->
+    decode_cont(Rest, CbFunState, {error, parser_error});
+decode(<<"-ERR 'Stale Connection'\r\n", Rest/binary>>, CbFunState) ->
+    decode_cont(Rest, CbFunState, {error, stale_connection});
+decode(<<"-ERR 'Slow Consumer'\r\n", Rest/binary>>, CbFunState) ->
+    decode_cont(Rest, CbFunState, {error, slow_consumer});
+decode(<<"-ERR 'Maximum Payload Exceeded'\r\n", Rest/binary>>, CbFunState) ->
+    decode_cont(Rest, CbFunState, {error, max_payload});
+decode(<<"-ERR 'Invalid Subject'\r\n", Rest/binary>>, CbFunState) ->
+    decode_cont(Rest, CbFunState, {error, invalid_subject});
+
+decode(<<"MSG ", Rest/binary>> = OrigMsg, CbFunState) ->
+    case parts(Rest) of
+        [L4, L3, L2, L1] ->
+            <<Subject:L1/bytes, " ", Sid:L2/bytes, " ", ReplyTo:L3/bytes, " ", BinPS:L4/bytes, "\r\n", More/binary>> = Rest,
+            PS = binary_to_integer(BinPS),
+            case More of
+                <<Payload:PS/binary, "\r\n", Next/binary>> ->
+                    decode_cont(Next, CbFunState, {msg, {Subject, Sid, ReplyTo, Payload}});
+                _ ->
+                    decode_cont(OrigMsg, CbFunState, stop)
+            end;
+        [L3, L2, L1] ->
+            <<Subject:L1/bytes, " ", Sid:L2/bytes, " ", BinPS:L3/bytes, "\r\n", More/binary>> = Rest,
+            PS = binary_to_integer(BinPS),
+            case More of
+                <<Payload:PS/binary, "\r\n", Next/binary>> ->
+                    decode_cont(Next, CbFunState, {msg, {Subject, Sid, undefined, Payload}});
+                _ ->
+                    decode_cont(OrigMsg, CbFunState, stop)
+            end;
+        eof ->
+            decode_cont(OrigMsg, CbFunState, stop);
+        _ ->
+            throw(parse_error)
+    end;
+
+decode(<<"PUB ", Rest/binary>> = OrigMsg, CbFunState) ->
+    case parts(Rest) of
+        [L3, L2, L1] ->
+            <<Subject:L1/bytes, " ", ReplyTo:L2/bytes, " ", BinPS:L3/bytes, "\r\n", More/binary>> = Rest,
+            PS = binary_to_integer(BinPS),
+            case More of
+                <<Payload:PS/binary, "\r\n", Next/binary>> ->
+                    decode_cont(Next, CbFunState, {pub, {Subject, ReplyTo, Payload}});
+                _ ->
+                    decode_cont(OrigMsg, CbFunState, stop)
+            end;
+        [L2, L1] ->
+            <<Subject:L1/bytes, " ", BinPS:L2/bytes, "\r\n", More/binary>> = Rest,
+            PS = binary_to_integer(BinPS),
+            case More of
+                <<Payload:PS/binary, "\r\n", Next/binary>> ->
+                    decode_cont(Next, CbFunState, {pub, {Subject, undefined, Payload}});
+                _ ->
+                    decode_cont(OrigMsg, CbFunState, stop)
+            end;
+        eof ->
+            decode_cont(OrigMsg, CbFunState, stop);
+        _ ->
+            throw(parse_error)
+    end;
+
+decode(<<"SUB ", Rest/binary>> = OrigMsg, CbFunState) ->
+    case parts(Rest) of
+        [L3, L2, L1] ->
+            <<Subject:L1/bytes, " ", QueueGrp:L2/bytes, " ", Sid:L3/bytes, "\r\n", Next/binary>> = Rest,
+            decode_cont(Next, CbFunState, {sub, {Subject, QueueGrp, Sid}});
+        [L2, L1] ->
+            <<Subject:L1/bytes, " ", Sid:L2/bytes, "\r\n", Next/binary>> = Rest,
+            decode_cont(Next, CbFunState, {sub, {Subject, undefined, Sid}});
+        eof ->
+            decode_cont(OrigMsg, CbFunState, stop);
+        _ ->
+            throw(parse_error)
+    end;
+
+decode(<<"UNSUB ", Rest/binary>> = OrigMsg, CbFunState) ->
+    case parts(Rest) of
+        [L2, L1] ->
+            <<Subject:L1/bytes, " ", BinMaxMsg:L2/bytes, "\r\n", Next/binary>> = Rest,
+            decode_cont(Next, CbFunState, {unsub, {Subject, binary_to_integer(BinMaxMsg)}});
+        [L1] ->
+            <<Subject:L1/bytes, "\r\n", Next/binary>> = Rest,
+            decode_cont(Next, CbFunState, {unsub, {Subject, undefined}});
+        eof ->
+            decode_cont(OrigMsg, CbFunState, stop);
+        _ ->
+            throw(parse_error)
+    end;
+
+decode(<<"CONNECT ", Rest/binary>> = OrigMsg, CbFunState) ->
+    case binary:split(Rest, get(nats_msg@nl)) of
+        [Info, More] ->
+            decode_cont(More, CbFunState, {connect, Info});
+        _ ->
+            decode_cont(OrigMsg, CbFunState, stop)
+    end;
+
+decode(<<"INFO ", Rest/binary>> = OrigMsg, CbFunState) ->
+    case binary:split(Rest, get(nats_msg@nl)) of
+        [Info, More] ->
+            decode_cont(More, CbFunState, {info, Info});
+        _ ->
+            decode_cont(OrigMsg, CbFunState, stop)
+    end;
+
+decode(Other, CbFunState) ->
+    decode_cont(Other, CbFunState, stop).
 
 %% == Internal - decode
 
-decode_messages(<<>>, Acc) ->
-    {Acc, <<>>};
+parts(Bin) ->
+    parts(Bin, 0, []).
 
-decode_messages(Bin, Acc) ->
-    case decode(Bin) of
-        {[], Rest} ->
-            {Acc, Rest};
-        {M, Rest} ->
-            decode_messages(Rest, [M | Acc])
-    end.
-
-decode_slow(connect, OrigMsg, Bin) ->
-    case extract_flip(Bin) of
-        false -> {[], OrigMsg};
-        {Flip, Rest} -> {{connect, Flip}, Rest}
-    end;
-
-decode_slow(info, OrigMsg, Bin) ->
-    case extract_flip(Bin) of
-        false -> {[], OrigMsg};
-        {Flip, Rest} -> {{info, Flip}, Rest}
-    end;
-
-decode_slow(msg, OrigMsg, Bin) ->
-    case extract_flip(Bin) of
-        false ->
-            {[], OrigMsg};
-        {Flip, Rest} ->
-            {Subject, Sid, ReplyTo, PS} = parse_msg_flip(Flip),
-            case byte_size(Rest) >= PS + 2 of
-                true ->
-                    {Payload, NewRest} = extract_line(Rest, PS),
-                    {{msg, {Subject, Sid, ReplyTo, Payload}}, NewRest};
-                _ ->
-                    {[], OrigMsg}
-            end
-    end;
-
-decode_slow(pub, OrigMsg, Bin) ->
-    case extract_flip(Bin) of
-        false ->
-            {[], OrigMsg};
-        {Flip, Rest} ->
-            {Subject, ReplyTo, PS} = parse_pub_flip(Flip),
-            case byte_size(Rest) >= PS + 2 of
-                true ->
-                    {Payload, NewRest} = extract_line(Rest, PS),
-                    {{pub, {Subject, ReplyTo, Payload}}, NewRest};
-                _ ->
-                    {[], OrigMsg}
-            end
-    end;
-
-decode_slow(sub, OrigMsg, Bin) ->
-    case extract_flip(Bin) of
-        false ->
-            {[], OrigMsg};
-        {Flip, Rest} ->
-            {{sub, parse_sub_flip(Flip)}, Rest}
-    end;
-
-decode_slow(unsub, OrigMsg, Bin) ->
-    case extract_flip(Bin) of
-        false ->
-            {[], OrigMsg};
-        {Flip, Rest} ->
-            {{unsub, parse_unsub_flip(Flip)}, Rest}
-    end.
-
-extract_flip(Bin) ->
-    case binary:match(Bin, get(nats_msg@nl)) of
-        nomatch -> false;
-        {Pos, _Len} -> extract_line(Bin, Pos)
-    end.
-
-extract_line(Bin, Len) ->
-    <<Ret:Len/binary, "\r\n", Rest/binary>> = Bin,
-    {Ret, Rest}.
-
-parse_msg_flip(Flip) ->
-     case binary:split(Flip, get(nats_msg@sep), [global]) of
-        [Subject, Sid, BinBytes] ->
-            {Subject, Sid, undefined, binary_to_integer(BinBytes)};
-        [Subject, Sid, ReplyTo, BinBytes] ->
-            {Subject, Sid, ReplyTo, binary_to_integer(BinBytes)};
-        _ ->
-            throw(parse_error)
-    end.
-
-parse_pub_flip(Flip) ->
-    case binary:split(Flip, get(nats_msg@sep), [global]) of
-        [Subject, BinBytes] ->
-            {Subject, undefined, binary_to_integer(BinBytes)};
-        [Subject, ReplyTo, BinBytes] ->
-            {Subject, ReplyTo, binary_to_integer(BinBytes)};
-        _ ->
-            throw(parse_error)
-    end.
-
-parse_sub_flip(Flip) ->
-    case binary:split(Flip, get(nats_msg@sep), [global]) of
-        [Subject, Sid] ->
-            {Subject, undefined, Sid};
-        [Subject, QueueGrp, Sid] ->
-            {Subject, QueueGrp, Sid};
-        _ ->
-            throw(parse_error)
-    end.
-
-parse_unsub_flip(Flip) ->
-    case binary:split(Flip, get(nats_msg@sep), [global]) of
-        [Subject] ->
-            {Subject, undefined};
-        [Subject, BinMaxMsg] ->
-            {Subject, binary_to_integer(BinMaxMsg)};
-        _ ->
-            throw(parse_error)
-    end.
+parts(<<>>, _, _) ->
+    eof;
+parts(<<"\r\n", _Rest/binary>>, Cnt, Acc) ->
+    [Cnt | Acc];
+parts(<<" ", Rest/binary>>, Cnt, Acc) ->
+    parts(Rest, 0, [Cnt | Acc]);
+parts(<<_:8, Rest/binary>>, Cnt, Acc) ->
+    parts(Rest, Cnt + 1, Acc).
 
 % upper_case(Bin) ->
 %     list_to_binary(string:to_upper(binary_to_list(Bin))).
