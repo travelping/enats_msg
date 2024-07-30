@@ -1,14 +1,22 @@
-# nats_msg
+# enats_msg
 
+Forked from https://github.com/yuce/nats_msg and renamed to enats_msg.
 
-**nats_msg** is a pure Erlang NATS message encoder/decoder library for
+**enats_msg** is a pure Erlang NATS message encoder/decoder library for
 [NATS](http://nats.io/) high performance messaging platform.
 For details about NATS protocol, see:
 [NATS Protocol](http://nats.io/documentation/internals/nats-protocol). It doesn't
-have any dependency other than Erlang/OTP (16+ *should* be OK) and optionally
+have any dependency other than Erlang/OTP (27+ *should* be OK) and optionally
 [rebar3](http://www.rebar3.org/).
 
 ## News
+
+* **Version 0.9.0** (*2024-07-30*):
+    * This version is incompatible with the original nats_msg versions of the library.
+	* The decoder has been reorganized to use continuation passing to better reuse binary
+	match contexts, resulting in a 50% performance increase.
+	* Multi message decoding has be reorganized to use continuation passing, resulting in
+	better performace for large message chunks.
 
 * **Version 0.4.1** (*2016-03-23*):
     * This version is incompatible with previous versions of the library.
@@ -18,16 +26,16 @@ have any dependency other than Erlang/OTP (16+ *should* be OK) and optionally
     * The parser is much more stricter now.
     * Encoding functions return iodata instead of binary.
     * You can use iodata anywhere a binary is expected.
-
+w
 
 ## Install
 
-**nats_msg** uses [rebar3](http://www.rebar3.org/) to build and tests and
+**enats_msg** uses [rebar3](http://www.rebar3.org/) to build and tests and
 it is available on [hex.pm](https://hex.pm/). Just include the following
 in your `rebar.config`:
 
 ```erlang
-{deps, [nats_msg]}.
+{deps, [enats_msg]}.
 ```
 
 ## Tests
@@ -52,8 +60,9 @@ Currently, no error handling is performed during encoding/decoding. You can prot
 against crashes by wrapping library functions between `try...catch`.
 
 `INFO` and `CONNECT` messages have a JSON object as their parameter; but in order to
-not introduce a dependency, **nats_msg** does not encode/decode JSON objects. These parameters
-are kept or returned as binaries. You can use [jsx](https://github.com/talentdeficit/jsx) or [jiffy](https://github.com/davisp/jiffy)
+not introduce a dependency, **enats_msg** does not encode/decode JSON objects. These parameters
+are kept or returned as binaries. You can use [jsx](https://github.com/talentdeficit/jsx),
+[jiffy](https://github.com/davisp/jiffy) or Erlang/OTP 23+ [json](https://www.erlang.org/doc/apps/stdlib/json.html)
 to deal with JSON. See the **INFO** and **CONNECT** sections in this document for examples.
 
 ### Encoding
@@ -191,6 +200,57 @@ Chunk = <<"PUB FRONT.DOOR INBOX.22 11\r\nKnock Knock\r\n">>,
 % Payload = <<"Knock Knock">>.
 ```
 
+### HPUB Message
+
+[NATS Spec](http://nats.io/documentation/internals/nats-protocol/#HPUB)
+
+#### Encode
+
+Notify subscribers of a subject:
+
+```erlang
+BinaryMsg = nats_msg:hpub(<<"NOTIFY.INBOX">>).
+```
+
+Send some data (*payload*) with empty headers to subscribers, providing a *reply* subject:
+
+```erlang
+BinaryMsg = nats_msg:hpub(<<"FOOBAR">>, <<"REPRAP">>, <<>>, <<"Hello, World!">>).
+```
+
+Send some data (*payload*) to subscribers (*without a reply subject*):
+
+```erlang
+BinaryMsg = nats_msg:hpub(<<"FOOBAR">>, undefined, <<>>, <<"Hello, World!">>).
+```
+
+### Decode
+
+Hpublish notification:
+
+```erlang
+
+Chunk = <<"HPUB NOTIFY 2 2\r\n\r\n\r\n">>
+{Msg, _} = nats_msg:decode(Chunk),
+{hpub, {Subject, ReplyTo, Header, Payload}} = Msg,
+% Subject = <<"NOTIFY">>,
+% ReplyTo = undefined,
+% Header = <<>>,
+% Payload = <<>>.
+```
+
+Publish message with subject, replier, header and payload:
+
+```erlang
+Chunk = <<"HPUB FRONT.DOOR INBOX.22 22 33\r\nNATS/1.0\r\nFoo: Bar\r\n\r\nKnock Knock\r\n">>,
+{Msg, _} = nats_msg:decode(Chunk),
+{hpub, {Subject, ReplyTo, Header, Payload}} = Msg,
+% Subject = <<"FRONT.DOOR">>,
+% ReplyTo = <<"INBOX.22">>,
+% Header = <<"NATS/1.0\r\nFoo: Bar~\r\n">>,
+% Payload = <<"Knock Knock">>.
+```
+
 ### SUB Message
 
 [NATS Spec](http://nats.io/documentation/internals/nats-protocol/#SUB)
@@ -286,6 +346,45 @@ Chunk = <<"MSG FOO.BAR 9 13\r\nHello, World!\r\n">>,
 % Payload = <<"Hello, World!">>.
 ```
 
+### HMSG Message
+
+[NATS Spec](http://nats.io/documentation/internals/nats-protocol/#HMSG)
+
+#### Encode
+
+Message with subject, empty header and SID:
+
+```erlang
+BinaryHmsg = nats_hmsg:hmsg(<<"FOO">>, <<"5">>).
+```
+
+Message with subject, sid, *reply to subject*, minimal header and payload:
+
+```erlang
+BinaryHmsg = nats_hmsg:hmsg(<<"FOO">>, <<"5">>, <<"INBOX">>, <<"NATS/1.0\r\n">>, <<"Hello!">>).
+```
+
+Message with subject, sid, empty header and payload:
+
+```erlang
+BinaryHmsg = nats_hmsg:hmsg(<<"FOO">>, <<"5">>, undefined, <<>>, <<"Hello!">>).
+```
+
+#### Decode
+
+Message with subject, sid and payload:
+
+```erlang
+Chunk = <<"HMSG FOO.BAR 9 2 15\r\n\r\nHello, World!\r\n">>,
+{Msg, _} = nats_hmsg:decode(Chunk),
+{hmsg, {Subject, Sid, ReplyTo, Header, Payload}} = Msg,
+% Subject = <<"FOO.BAR">>,
+% Sid = <<"9">>,
+% ReplyTo = undefined,
+% Header = <<>>,
+% Payload = <<"Hello, World!">>.
+```
+
 ### PING Message
 
 [NATS Spec](http://nats.io/documentation/internals/nats-protocol/#PING)
@@ -341,7 +440,7 @@ BinaryMsg = nats_msg:ok().
 
 [NATS Spec](http://nats.io/documentation/internals/nats-protocol/#OKERR)
 
-The spec defines a predefined set of error messages, so **nats_msg** encodes/decodes these
+The spec defines a predefined set of error messages, so **enats_msg** encodes/decodes these
 to/from atoms as:
 
 * `'Unknown Protocol Operation'` => `unknown_operation`
@@ -373,6 +472,7 @@ Chunk = <<"-ERR 'Authorization Timeout'\r\n">>,
 
 ```
 Copyright (c) 2016, Yuce Tekol <yucetekol@gmail.com>.
+Copyright (c) 2024, Travelping GmbH <info@travelping.com>.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without

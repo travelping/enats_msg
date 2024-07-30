@@ -1,5 +1,6 @@
 %
 % Copyright (c) 2016, Yuce Tekol <yucetekol@gmail.com>.
+% Copyright (c) 2024, Travelping GmbH <info@travelping.com>.
 % All rights reserved.
 
 % Redistribution and use in source and binary forms, with or without
@@ -37,6 +38,7 @@
 -export([init/0,
          encode/1,
          decode/1,
+         decode/2,
          decode_all/1]).
 
 -export([ping/0,
