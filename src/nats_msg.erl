@@ -1,35 +1,33 @@
-%
-% Copyright (c) 2016, Yuce Tekol <yucetekol@gmail.com>.
-% Copyright (c) 2024, Travelping GmbH <info@travelping.com>.
-% All rights reserved.
-
-% Redistribution and use in source and binary forms, with or without
-% modification, are permitted provided that the following conditions are
-% met:
-
-% * Redistributions of source code must retain the above copyright
-%   notice, this list of conditions and the following disclaimer.
-
-% * Redistributions in binary form must reproduce the above copyright
-%   notice, this list of conditions and the following disclaimer in the
-%   documentation and/or other materials provided with the distribution.
-
-% * The names of its contributors may not be used to endorse or promote
-%   products derived from this software without specific prior written
-%   permission.
-
-% THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-% "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-% LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-% A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-% OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-% SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-% LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-% DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-% THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-% (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-% OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-%
+%% Copyright (c) 2016, Yuce Tekol <yucetekol@gmail.com>.
+%% Copyright (c) 2024, Travelping GmbH <info@travelping.com>.
+%% All rights reserved.
+%%
+%% Redistribution and use in source and binary forms, with or without
+%% modification, are permitted provided that the following conditions are
+%% met:
+%%
+%% * Redistributions of source code must retain the above copyright
+%%   notice, this list of conditions and the following disclaimer.
+%%
+%% * Redistributions in binary form must reproduce the above copyright
+%%   notice, this list of conditions and the following disclaimer in the
+%%   documentation and/or other materials provided with the distribution.
+%%
+%% * The names of its contributors may not be used to endorse or promote
+%%   products derived from this software without specific prior written
+%%   permission.
+%%
+%% THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+%% "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+%% LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+%% A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+%% OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+%% SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+%% LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+%% DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+%% THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+%% (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+%% OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 -module(nats_msg).
 -author("Yuce Tekol").
@@ -165,24 +163,24 @@ encode({connect, BinConnect}) -> [<<"CONNECT ">>, BinConnect, <<"\r\n">>];
 encode({pub, {Subject, undefined, Payload}}) ->
     BinPS = integer_to_binary(iolist_size(Payload)),
     [<<"PUB ">>, Subject, <<" ">>, BinPS, <<"\r\n">>,
-      Payload, <<"\r\n">>];
+     Payload, <<"\r\n">>];
 
 encode({pub, {Subject, ReplyTo, Payload}}) ->
     BinPS = integer_to_binary(iolist_size(Payload)),
     [<<"PUB ">>, Subject, <<" ">>, ReplyTo, <<" ">>, BinPS, <<"\r\n">>,
-      Payload, <<"\r\n">>];
+     Payload, <<"\r\n">>];
 
 encode({hpub, {Subject, undefined, Header, Payload}}) ->
     BinHdrS = integer_to_binary(iolist_size(Header) + 2),
     BinPS = integer_to_binary(iolist_size(Header) + 2 + iolist_size(Payload)),
     [<<"HPUB ">>, Subject, <<" ">>, BinHdrS, <<" ">>, BinPS, <<"\r\n">>,
-      Header, <<"\r\n">>, Payload, <<"\r\n">>];
+     Header, <<"\r\n">>, Payload, <<"\r\n">>];
 
 encode({hpub, {Subject, ReplyTo, Header, Payload}}) ->
     BinHdrS = integer_to_binary(iolist_size(Header) + 2),
     BinPS = integer_to_binary(iolist_size(Header) + 2 + iolist_size(Payload)),
     [<<"HPUB ">>, Subject, <<" ">>, ReplyTo, <<" ">>, BinHdrS, <<" ">>, BinPS, <<"\r\n">>,
-      Header, <<"\r\n">>, Payload, <<"\r\n">>];
+     Header, <<"\r\n">>, Payload, <<"\r\n">>];
 
 encode({sub, {Subject, undefined, Sid}}) ->
     [<<"SUB ">>, Subject, <<" ">>, Sid, <<"\r\n">>];
@@ -200,26 +198,26 @@ encode({unsub, {Subject, MaxMsg}}) ->
 encode({msg, {Subject, Sid, undefined, Payload}}) ->
     BinPS = integer_to_binary(iolist_size(Payload)),
     [<<"MSG ">>, Subject, <<" ">>, Sid, <<" ">>, BinPS, <<"\r\n">>,
-      Payload, <<"\r\n">>];
+     Payload, <<"\r\n">>];
 
 encode({msg, {Subject, Sid, ReplyTo, Payload}}) ->
     BinPS = integer_to_binary(iolist_size(Payload)),
     [<<"MSG ">>, Subject, <<" ">>, Sid, <<" ">>, ReplyTo, <<" ">>, BinPS, <<"\r\n">>,
-      Payload, <<"\r\n">>];
+     Payload, <<"\r\n">>];
 
 encode({hmsg, {Subject, Sid, undefined, Header, Payload}}) ->
     BinHdrS = integer_to_binary(iolist_size(Header) + 2),
     BinPS = integer_to_binary(iolist_size(Header) + 2 + iolist_size(Payload)),
     [<<"HMSG ">>, Subject, <<" ">>, Sid, <<" ">>, BinHdrS, <<" ">>, BinPS, <<"\r\n">>,
-      Header, <<"\r\n">>, Payload, <<"\r\n">>];
+     Header, <<"\r\n">>, Payload, <<"\r\n">>];
 
 encode({hmsg, {Subject, Sid, ReplyTo, Header, Payload}}) ->
     BinHdrS = integer_to_binary(iolist_size(Header) + 2),
     BinPS = integer_to_binary(iolist_size(Header) + 2 + iolist_size(Payload)),
     [<<"HMSG ">>, Subject, <<" ">>, Sid, <<" ">>, ReplyTo, <<" ">>, BinHdrS, <<" ">>, BinPS, <<"\r\n">>,
-      Header, <<"\r\n">>, Payload, <<"\r\n">>].
+     Header, <<"\r\n">>, Payload, <<"\r\n">>].
 
-% == Decode API
+%% == Decode API
 
 decode_single_msg_fun(stop, State) ->
     {stop, State};
@@ -235,7 +233,7 @@ decode_all(Bin) ->
     decode(Bin, {fun decode_all_msg_fun/2, []}).
 
 -spec decode(Param :: iodata()) ->
-    {term(), binary()}.
+          {term(), binary()}.
 
 decode(L) when is_list(L) ->
     decode(iolist_to_binary(L));
@@ -449,8 +447,8 @@ parts(<<" ", Rest/binary>>, Cnt, Acc) ->
 parts(<<_:8, Rest/binary>>, Cnt, Acc) ->
     parts(Rest, Cnt + 1, Acc).
 
-% upper_case(Bin) ->
-%     list_to_binary(string:to_upper(binary_to_list(Bin))).
+%% upper_case(Bin) ->
+%%     list_to_binary(string:to_upper(binary_to_list(Bin))).
 
 %% == Tests
 
@@ -698,7 +696,7 @@ dec_all_messages_2_test() ->
     E = {[{info, <<"{\"server_id\":\"b379e32c3cd3dd8515c919a42d813eaf\",\"version\":\"0.7.2\",\"go\":\"go1.5.2\",\"host\":\"127.0.0.1\",\"port\":4222,\"auth_required\":false,\"ssl_required\":false,\"tls_required\":false,\"tls_verify\":false,\"max_payload\":1048576} ">>}], <<>>},
     ?assertEqual(E, R).
 
-% % == Other Tests
+%% == Other Tests
 
 decode_encode_1_test() ->
     E = <<"MSG FOO.BAR 9 INBOX.34 13\r\nHello, World!\r\n">>,
