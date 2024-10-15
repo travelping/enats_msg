@@ -73,6 +73,8 @@ parse_header(<<>>, Acc) ->
 parse_header(Data, Acc) ->
     parse_hd_name(Data, Acc, <<>>).
 
+parse_hd_name(<<>>, Acc, << $\r, $\n>>) ->
+    parse_header(<<>>, Acc);
 parse_hd_name(<< C, Rest/bits >>, Acc, SoFar) ->
     case C of
         $: -> parse_hd_before_value(Rest, Acc, SoFar);
