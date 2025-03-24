@@ -31,7 +31,7 @@ Run the tests using:
 
 ## Usage
 
-> IMPORTANT!
+> ### IMPORTANT! {: .info}
 >
 > Before running any decoding functions, `nats_msg:init/0` must be called once.
 
@@ -84,12 +84,25 @@ to decode it.
 
 The `Message`  be used as an input to `nats_msg:encode`, like:
 
+<!-- tabs-open -->
+
+### Erlang
+
 ```erlang
 SomeBinary = ...
 {Msg, Remaining} = nats_msg:decode(SomeBinary),
 ReEncodedBinary = nats_msg:encode(Msg),
-% ReEncodedBinary = SomeBinary
 ```
+
+### Elixir
+
+```elixir
+some_binary = ...
+{msg, remaining} = :nats_msg.decode(some_binary)
+re_encoded_binary = :nats_msg.encode(msg)
+```
+
+<!-- tabs-close -->
 
 ### INFO Message
 
@@ -97,13 +110,31 @@ ReEncodedBinary = nats_msg:encode(Msg),
 
 #### Encode
 
+<!-- tabs-open -->
+
+### Erlang
+
 ```erlang
 ServerInfo = #{<<"auth_required">> => true, <<"server_id">> => <<"0001-SERVER">>},
-BinaryInfo = jsx:encode(ServerInfo),
+BinaryInfo = json:encode(ServerInfo),
 BinaryMsg = nats_msg:info(BinaryInfo).
 ```
 
+### Elixir
+
+```elixir
+server_info = %{"auth_required" => true, "server_id" => "0001-SERVER"}
+binary_info = Jason.encode!(server_info)
+binary_msg = :nats_msg.info(binary_info)
+```
+
+<!-- tabs-close -->
+
 #### Decode
+
+<!-- tabs-open -->
+
+### Erlang
 
 ```erlang
 Chunk = <<"INFO {\"auth_required\":true,\"server_id\":\"0001-SERVER\"}\r\n">>,
@@ -112,19 +143,48 @@ Chunk = <<"INFO {\"auth_required\":true,\"server_id\":\"0001-SERVER\"}\r\n">>,
 ServerInfo = jsx:decode(BinaryInfo, [return_maps]).
 ```
 
+### Elixir
+
+```elixir
+chunk = "INFO {\"auth_required\":true,\"server_id\":\"0001-SERVER\"}\r\n"
+{msg, _} = :nats_msg.decode(chunk)
+{:info, binary_info} = msg
+server_info = Jason.decode!(binary_info, keys: :atoms)
+```
+
+<!-- tabs-close -->
+
 ### CONNECT Message
 
 [NATS Spec](http://nats.io/documentation/internals/nats-protocol/#CONNECT)
 
 #### Encode
 
+<!-- tabs-open -->
+
+### Erlang
+
 ```erlang
 ConnectInfo = #{<<"auth_required">> => true, <<"server_id">> => <<"0001-SERVER">>},
-BinaryInfo = jsx:encode(ServerInfo),
+BinaryInfo = jsx:encode(ConnectInfo),
 BinaryMsg = nats_msg:connect(BinaryInfo).
 ```
 
+### Elixir
+
+```elixir
+connect_info = %{"auth_required" => true, "server_id" => "0001-SERVER"}
+binary_info = Jason.encode!(connect_info)
+binary_msg = :nats_msg.connect(binary_info)
+```
+
+<!-- tabs-close -->
+
 #### Decode
+
+<!-- tabs-open -->
+
+### Erlang
 
 ```erlang
 Chunk = <<"CONNECT {\"verbose\":true,\"name\":\"the_client\"}\r\n">>,
@@ -132,6 +192,16 @@ Chunk = <<"CONNECT {\"verbose\":true,\"name\":\"the_client\"}\r\n">>,
 {connect, BinaryInfo} = Msg,
 ClientInfo = jsx:decode(BinaryInfo, [return_maps]).
 ```
+
+### Elixir
+
+```elixir
+chunk = "CONNECT {\"verbose\":true,\"name\":\"the_client\"}\r\n"
+{:connect, binary_info} = :nats_msg.decode(chunk)
+client_info = Jason.decode!(binary_info)
+```
+
+<!-- tabs-close -->
 
 ### PUB Message
 
@@ -141,25 +211,65 @@ ClientInfo = jsx:decode(BinaryInfo, [return_maps]).
 
 Notify subscribers of a subject:
 
+<!-- tabs-open -->
+
+### Erlang
+
 ```erlang
 BinaryMsg = nats_msg:pub(<<"NOTIFY.INBOX">>).
 ```
 
+### Elixir
+
+```elixir
+binary_msg = :nats_msg.pub("NOTIFY.INBOX")
+```
+
+<!-- tabs-close -->
+
 Send some data (*payload*) to subscribers, providing a *reply* subject:
+
+<!-- tabs-open -->
+
+### Erlang
 
 ```erlang
 BinaryMsg = nats_msg:pub(<<"FOOBAR">>, <<"REPRAP">>, <<"Hello, World!">>).
 ```
 
+### Elixir
+
+```elixir
+binary_msg = :nats_msg.pub("FOOBAR", "REPRAP", "Hello, World!")
+```
+
+<!-- tabs-close -->
+
 Send some data (*payload*) to subscribers (*without a reply subject*):
+
+<!-- tabs-open -->
+
+### Erlang
 
 ```erlang
 BinaryMsg = nats_msg:pub(<<"FOOBAR">>, undefined, <<"Hello, World!">>).
 ```
 
+### Elixir
+
+```elixir
+binary_msg = :nats_msg.pub("FOOBAR", :undefined, "Hello, World!")
+```
+
+<!-- tabs-close -->
+
 ### Decode
 
 Publish notification:
+
+<!-- tabs-open -->
+
+### Erlang
 
 ```erlang
 Chunk = <<"PUB NOTIFY 0\r\n\r\n">>,
@@ -170,7 +280,24 @@ Chunk = <<"PUB NOTIFY 0\r\n\r\n">>,
 % Payload = <<>>.
 ```
 
+### Elixir
+
+```elixir
+chunk = "PUB NOTIFY 0\r\n\r\n"
+{msg, _} = :nats_msg.decode(chunk)
+{:pub, {subject, reply_to, payload}} = msg
+# ^subject = "NOTIFY"
+# ^reply_to = :undefined
+# ^payload = ""
+```
+
+<!-- tabs-close -->
+
 Publish message with subject, replier and payload:
+
+<!-- tabs-open -->
+
+### Erlang
 
 ```erlang
 Chunk = <<"PUB FRONT.DOOR INBOX.22 11\r\nKnock Knock\r\n">>,
@@ -181,6 +308,19 @@ Chunk = <<"PUB FRONT.DOOR INBOX.22 11\r\nKnock Knock\r\n">>,
 % Payload = <<"Knock Knock">>.
 ```
 
+### Elixir
+
+```elixir
+chunk = "PUB FRONT.DOOR INBOX.22 11\r\nKnock Knock\r\n"
+{msg, _} = :nats_msg.decode(chunk)
+{:pub, {subject, reply_to, payload}} = msg
+# ^subject = "FRONT.DOOR"
+# ^reply_to = "INBOX.22"
+# ^payload = "Knock Knock"
+```
+
+<!-- tabs-close -->
+
 ### HPUB Message
 
 [NATS Spec](http://nats.io/documentation/internals/nats-protocol/#HPUB)
@@ -189,29 +329,69 @@ Chunk = <<"PUB FRONT.DOOR INBOX.22 11\r\nKnock Knock\r\n">>,
 
 Notify subscribers of a subject:
 
+<!-- tabs-open -->
+
+### Erlang
+
 ```erlang
 BinaryMsg = nats_msg:hpub(<<"NOTIFY.INBOX">>).
 ```
 
+### Elixir
+
+```elixir
+binary_msg = :nats_msg.hpub("NOTIFY.INBOX")
+```
+
+<!-- tabs-close -->
+
 Send some data (*payload*) with empty headers to subscribers, providing a *reply* subject:
+
+<!-- tabs-open -->
+
+### Erlang
 
 ```erlang
 BinaryMsg = nats_msg:hpub(<<"FOOBAR">>, <<"REPRAP">>, <<>>, <<"Hello, World!">>).
 ```
 
+### Elixir
+
+```elixir
+binary_msg = :nats_msg.hpub("FOOBAR", "REPRAP", "", "Hello, World!")
+```
+
+<!-- tabs-close -->
+
 Send some data (*payload*) to subscribers (*without a reply subject*):
+
+<!-- tabs-open -->
+
+### Erlang
 
 ```erlang
 BinaryMsg = nats_msg:hpub(<<"FOOBAR">>, undefined, <<>>, <<"Hello, World!">>).
 ```
 
+### Elixir
+
+```elixir
+binary_msg = :nats_msg.hpub("FOOBAR", :undefined, "", "Hello, World!")
+```
+
+<!-- tabs-close -->
+
 ### Decode
 
 Hpublish notification:
 
+<!-- tabs-open -->
+
+### Erlang
+
 ```erlang
 
-Chunk = <<"HPUB NOTIFY 2 2\r\n\r\n\r\n">>
+Chunk = <<"HPUB NOTIFY 2 2\r\n\r\n\r\n">>,
 {Msg, _} = nats_msg:decode(Chunk),
 {hpub, {Subject, ReplyTo, Header, Payload}} = Msg,
 % Subject = <<"NOTIFY">>,
@@ -220,7 +400,25 @@ Chunk = <<"HPUB NOTIFY 2 2\r\n\r\n\r\n">>
 % Payload = <<>>.
 ```
 
+### Elixir
+
+```elixir
+chunk = "HPUB NOTIFY 2 2\r\n\r\n\r\n"
+{msg, _} = :nats_msg.decode(chunk)
+{:hpub, {subject, reply_to, header, payload}} = msg
+# ^subject = "NOTIFY"
+# ^reply_to = :undefined
+# ^header = ""
+# ^payload = ""
+```
+
+<!-- tabs-close -->
+
 Publish message with subject, replier, header and payload:
+
+<!-- tabs-open -->
+
+### Erlang
 
 ```erlang
 Chunk = <<"HPUB FRONT.DOOR INBOX.22 22 33\r\nNATS/1.0\r\nFoo: Bar\r\n\r\nKnock Knock\r\n">>,
@@ -232,6 +430,20 @@ Chunk = <<"HPUB FRONT.DOOR INBOX.22 22 33\r\nNATS/1.0\r\nFoo: Bar\r\n\r\nKnock K
 % Payload = <<"Knock Knock">>.
 ```
 
+### Elixir
+
+```elixir
+chunk = "HPUB FRONT.DOOR INBOX.22 22 33\r\nNATS/1.0\r\nFoo: Bar\r\n\r\nKnock Knock\r\n"
+{msg, _} = :nats_msg.decode(chunk)
+{:hpub, {subject, reply_to, header, payload}} = msg
+# ^subject = "FRONT.DOOR"
+# ^reply_to = "INBOX.22"
+# ^header = "NATS/1.0\r\nFoo: Bar~\r\n"
+# ^payload = "Knock Knock"
+```
+
+<!-- tabs-close -->
+
 ### SUB Message
 
 [NATS Spec](http://nats.io/documentation/internals/nats-protocol/#SUB)
@@ -240,17 +452,45 @@ Chunk = <<"HPUB FRONT.DOOR INBOX.22 22 33\r\nNATS/1.0\r\nFoo: Bar\r\n\r\nKnock K
 
 Subscribe message with subject and SID:
 
+<!-- tabs-open -->
+
+### Erlang
+
 ```erlang
 BinaryMsg = nats_msg:sub(<<"FOO">>, <<"1">>).
 ```
 
+### Elixir
+
+```elixir
+binary_msg = :nats_msg.sub("FOO", "1")
+```
+
+<!-- tabs-close -->
+
 Subscribe message with subject, group queue and SID:
+
+<!-- tabs-open -->
+
+### Erlang
 
 ```erlang
 BinaryMsg = nats_msg:sub(<<"BAR">>, <<"G1">>, <<"44">>)
 ```
 
+### Elixir
+
+```elixir
+binary_msg = :nats_msg.sub("BAR", "G1", "44")
+```
+
+<!-- tabs-close -->
+
 #### Decode
+
+<!-- tabs-open -->
+
+### Erlang
 
 ```erlang
 Chunk = <<"SUB FOO 1\r\n">>,
@@ -261,6 +501,19 @@ Chunk = <<"SUB FOO 1\r\n">>,
 % Sid = <<"1">>.
 ```
 
+### Elixir
+
+```elixir
+chunk = "SUB FOO 1\r\n"
+{msg, _} = :nats_msg.decode(chunk)
+{:sub, {subject, group_queue, sid}} = msg
+# ^subject = <<"FOO">>
+# ^group_queue = :undefined
+# ^sid = "1"
+```
+
+<!-- tabs-close -->
+
 ### UNSUB Message
 
 [NATS Spec](http://nats.io/documentation/internals/nats-protocol/#UNSUB)
@@ -269,17 +522,45 @@ Chunk = <<"SUB FOO 1\r\n">>,
 
 Unsubscribe message with SID:
 
+<!-- tabs-open -->
+
+### Erlang
+
 ```erlang
 BinaryMsg = nats_msg:unsub(<<"1">>).
 ```
 
+### Elixir
+
+```elixir
+binary_msg = :nats_msg.unsub("1")
+```
+
+<!-- tabs-close -->
+
 Unsubscribe message with SID and *max messages*:
+
+<!-- tabs-open -->
+
+### Erlang
 
 ```erlang
 BinaryMsg = nats_msg:unsub(<<"1">>, 10).
 ```
 
+### Elixir
+
+```elixir
+binary_msg = :nats_msg.unsub("1", 10)
+```
+
+<!-- tabs-close -->
+
 #### Decode
+
+<!-- tabs-open -->
+
+### Erlang
 
 ```erlang
 Chunk = <<"UNSUB 1 10\r\n">>,
@@ -289,6 +570,18 @@ Chunk = <<"UNSUB 1 10\r\n">>,
 % MaxMessages = 10
 ```
 
+### Elixir
+
+```elixir
+chunk = "UNSUB 1 10\r\n"
+{msg, _} = :nats_msg.decode(chunk)
+{:unsub, {sid, max_messages}} = msg
+# ^sid = "1"
+# ^max_messages = 10
+```
+
+<!-- tabs-close -->
+
 ### MSG Message
 
 [NATS Spec](http://nats.io/documentation/internals/nats-protocol/#MSG)
@@ -297,25 +590,65 @@ Chunk = <<"UNSUB 1 10\r\n">>,
 
 Message with subject and SID:
 
+<!-- tabs-open -->
+
+### Erlang
+
 ```erlang
 BinaryMsg = nats_msg:msg(<<"FOO">>, <<"5">>).
 ```
 
+### Elixir
+
+```elixir
+binary_msg = :nats_msg.msg("FOO", "5")
+```
+
+<!-- tabs-close -->
+
 Message with subject, sid, *reply to subject* and payload:
+
+<!-- tabs-open -->
+
+### Erlang
 
 ```erlang
 BinaryMsg = nats_msg:msg(<<"FOO">>, <<"5">>, <<"INBOX">>, <<"Hello!">>).
 ```
 
+### Elixir
+
+```elixir
+binary_msg = :nats_msg.msg("FOO", "5", "INBOX", "Hello!")
+```
+
+<!-- tabs-close -->
+
 Message with subject, sid and payload:
+
+<!-- tabs-open -->
+
+### Erlang
 
 ```erlang
 BinaryMsg = nats_msg:msg(<<"FOO">>, <<"5">>, undefined, <<"Hello!">>).
 ```
 
+### Elixir
+
+```elixir
+binary_msg = :nats_msg.msg("FOO", "5", :undefined, "Hello!")
+```
+
+<!-- tabs-close -->
+
 #### Decode
 
 Message with subject, sid and payload:
+
+<!-- tabs-open -->
+
+### Erlang
 
 ```erlang
 Chunk = <<"MSG FOO.BAR 9 13\r\nHello, World!\r\n">>,
@@ -327,6 +660,20 @@ Chunk = <<"MSG FOO.BAR 9 13\r\nHello, World!\r\n">>,
 % Payload = <<"Hello, World!">>.
 ```
 
+### Elixir
+
+```elixir
+chunk = "MSG FOO.BAR 9 13\r\nHello, World!\r\n"
+{msg, _} = :nats_msg.decode(chunk)
+{:msg, {subject, sid, reply_to, payload}} = msg
+% subject = "FOO.BAR"
+% sid = "9"
+% reply_to = :undefined
+% payload = "Hello, World!"
+```
+
+<!-- tabs-close -->
+
 ### HMSG Message
 
 [NATS Spec](http://nats.io/documentation/internals/nats-protocol/#HMSG)
@@ -335,25 +682,65 @@ Chunk = <<"MSG FOO.BAR 9 13\r\nHello, World!\r\n">>,
 
 Message with subject, empty header and SID:
 
+<!-- tabs-open -->
+
+### Erlang
+
 ```erlang
 BinaryHmsg = nats_hmsg:hmsg(<<"FOO">>, <<"5">>).
 ```
 
+### Elixir
+
+```elixir
+binary_hmsg = :nats_hmsg.hmsg("FOO", "5")
+```
+
+<!-- tabs-close -->
+
 Message with subject, sid, *reply to subject*, minimal header and payload:
+
+<!-- tabs-open -->
+
+### Erlang
 
 ```erlang
 BinaryHmsg = nats_hmsg:hmsg(<<"FOO">>, <<"5">>, <<"INBOX">>, <<"NATS/1.0\r\n">>, <<"Hello!">>).
 ```
 
+### Elixir
+
+```elixir
+binary_hmsg = :nats_hmsg.hmsg("FOO", "5", "INBOX", "NATS/1.0\r\n", "Hello!")
+```
+
+<!-- tabs-close -->
+
 Message with subject, sid, empty header and payload:
+
+<!-- tabs-open -->
+
+### Erlang
 
 ```erlang
 BinaryHmsg = nats_hmsg:hmsg(<<"FOO">>, <<"5">>, undefined, <<>>, <<"Hello!">>).
 ```
 
+### Elixir
+
+```elixir
+binary_hmsg = :nats_hmsg.hmsg("FOO", "5", :undefined, "", "Hello!")
+```
+
+<!-- tabs-close -->
+
 #### Decode
 
 Message with subject, sid and payload:
+
+<!-- tabs-open -->
+
+### Erlang
 
 ```erlang
 Chunk = <<"HMSG FOO.BAR 9 2 15\r\n\r\nHello, World!\r\n">>,
@@ -366,22 +753,62 @@ Chunk = <<"HMSG FOO.BAR 9 2 15\r\n\r\nHello, World!\r\n">>,
 % Payload = <<"Hello, World!">>.
 ```
 
+### Elixir
+
+```elixir
+chunk = "HMSG FOO.BAR 9 2 15\r\n\r\nHello, World!\r\n"
+{msg, _} = :nats_hmsg.decode(chunk)
+{:hmsg, {subject, sid, reply:to, header, payload}} = msg
+# ^subject = "FOO.BAR"
+# ^sid = "9"
+# ^reply_to = :undefined
+# ^header = ""
+# ^payload = "Hello, World!"
+```
+
+<!-- tabs-close -->
+
 ### PING Message
 
 [NATS Spec](http://nats.io/documentation/internals/nats-protocol/#PING)
 
 #### Encode
 
+<!-- tabs-open -->
+
+### Erlang
+
 ```erlang
 BinaryMsg = nats_msg:ping().
 ```
 
+### Elixir
+
+```elixir
+binary_msg = :nats_msg.ping()
+```
+
+<!-- tabs-close -->
+
 #### Decode
+
+<!-- tabs-open -->
+
+### Erlang
 
 ```erlang
 {Msg, _} = nats_msg:decode(<<"PING\r\n">>),
 % Msg = ping
 ```
+
+### Elixir
+
+```elixir
+{msg, _} = :nats_msg.decode("PING\r\n")
+# ^msg = :ping
+```
+
+<!-- tabs-close -->
 
 ### PONG Message
 
@@ -389,16 +816,41 @@ BinaryMsg = nats_msg:ping().
 
 #### Encode
 
+<!-- tabs-open -->
+
+### Erlang
+
 ```erlang
 BinaryMsg = nats_msg:pong().
 ```
 
+### Elixir
+
+```elixir
+binary_msg = :nats_msg.pong()
+```
+
+<!-- tabs-close -->
+
 #### Decode
+
+<!-- tabs-open -->
+
+### Erlang
 
 ```erlang
 {Msg, _} = nats_msg:decode(<<"PONG\r\n">>),
 % Msg = pong
 ```
+
+### Elixir
+
+```elixir
+{msg, _} = :nats_msg.decode("PONG\r\n")
+# ^msg = :pong
+```
+
+<!-- tabs-close -->
 
 ### +OK Message
 
@@ -406,16 +858,41 @@ BinaryMsg = nats_msg:pong().
 
 #### Encode
 
+<!-- tabs-open -->
+
+### Erlang
+
 ```erlang
 BinaryMsg = nats_msg:ok().
 ```
 
+### Elixir
+
+```elixir
+binary_msg = :nats_msg.ok()
+```
+
+<!-- tabs-close -->
+
 #### Decode
+
+<!-- tabs-open -->
+
+### Erlang
 
 ```erlang
 {Msg, _} = nats_msg:decode(<<"+OK\r\n">>),
 % Msg = ok
 ```
+
+### Elixir
+
+```elixir
+{msg, _} = :nats_msg.decode("+OK\r\n")
+# ^msg = :ok
+```
+
+<!-- tabs-close -->
 
 ### -ERR Message
 
@@ -436,11 +913,27 @@ to/from atoms as:
 
 #### Encode
 
+<!-- tabs-open -->
+
+### Erlang
+
 ```erlang
 BinaryMsg = nats_msg:err(auth_violation).
 ```
 
+### Elixir
+
+```elixir
+binary_msg = :nats_msg.err(:auth_violation)
+```
+
+<!-- tabs-close -->
+
 #### Decode
+
+<!-- tabs-open -->
+
+### Erlang
 
 ```erlang
 Chunk = <<"-ERR 'Authorization Timeout'\r\n">>,
@@ -448,6 +941,17 @@ Chunk = <<"-ERR 'Authorization Timeout'\r\n">>,
 {ok, Error} = Msg,
 % Error = auth_timeout
 ```
+
+### Elixir
+
+```elixir
+chunk = "-ERR 'Authorization Timeout'\r\n"
+{msg, _} = :nats_msg.decode(chunk)
+{:ok, error} = msg
+# ^error = :auth_timeout
+```
+
+<!-- tabs-close -->
 
 ## License
 
