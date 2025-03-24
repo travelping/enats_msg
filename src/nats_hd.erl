@@ -29,6 +29,7 @@
 %% OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 -module(nats_hd).
+%-compile([bin_opt_info]).
 
 -export([header/2, header/1, headers/1]).
 -export([parse_headers/1]).
@@ -41,15 +42,15 @@
 
 -define(NL, ~"\r\n").
 
--spec header(status() | binary(), headers()) -> iodata().
+-spec header(status() | binary(), headers()) -> iolist().
 header(Status, Headers) ->
     [version(), ~" ", status(Status), ?NL, headers(Headers)].
 
--spec header(headers()) -> iodata().
+-spec header(headers()) -> iolist().
 header(Headers) ->
     [version(), ?NL, headers(Headers)].
 
--spec headers(headers()) -> iodata().
+-spec headers(headers()) -> iolist().
 headers(Headers) ->
         [[N, ~": ", V, ?NL] || {N, V} <- Headers].
 
@@ -64,18 +65,18 @@ status(X) when is_binary(X) ->
 %% @doc Parse the list of headers.
 %% copied from cowlib
 
--spec parse_headers(binary()) -> {[{binary(), binary()}], binary()}.
+-spec parse_headers(binary()) -> [{binary(), binary()}].
 parse_headers(Data) ->
     parse_header(Data, []).
 
 parse_header(<<>>, Acc) ->
     lists:reverse(Acc);
-parse_header(Data, Acc) ->
+parse_header(<<Data/binary>>, Acc) ->
     parse_hd_name(Data, Acc, <<>>).
 
 parse_hd_name(<<>>, Acc, << $\r, $\n>>) ->
     parse_header(<<>>, Acc);
-parse_hd_name(<< C, Rest/bits >>, Acc, SoFar) ->
+parse_hd_name(<< C, Rest/binary >>, Acc, SoFar) ->
     case C of
         $: -> parse_hd_before_value(Rest, Acc, SoFar);
         $\s -> parse_hd_name_ws(Rest, Acc, SoFar);
@@ -83,24 +84,24 @@ parse_hd_name(<< C, Rest/bits >>, Acc, SoFar) ->
         _ -> parse_hd_name(Rest, Acc, <<SoFar/binary, C>>)
     end.
 
-parse_hd_name_ws(<< C, Rest/bits >>, Acc, Name) ->
+parse_hd_name_ws(<< C, Rest/binary >>, Acc, Name) ->
     case C of
         $: -> parse_hd_before_value(Rest, Acc, Name);
         $\s -> parse_hd_name_ws(Rest, Acc, Name);
         $\t -> parse_hd_name_ws(Rest, Acc, Name)
     end.
 
-parse_hd_before_value(<< $\s, Rest/bits >>, Acc, Name) ->
+parse_hd_before_value(<< $\s, Rest/binary >>, Acc, Name) ->
     parse_hd_before_value(Rest, Acc, Name);
-parse_hd_before_value(<< $\t, Rest/bits >>, Acc, Name) ->
+parse_hd_before_value(<< $\t, Rest/binary >>, Acc, Name) ->
     parse_hd_before_value(Rest, Acc, Name);
 parse_hd_before_value(Data, Acc, Name) ->
     parse_hd_value(Data, Acc, Name, <<>>).
 
-parse_hd_value(<< $\r, $\n, Rest/bits >>, Acc, Name, SoFar) ->
+parse_hd_value(<< $\r, $\n, Rest/binary >>, Acc, Name, SoFar) ->
     Value = clean_value_ws_end(SoFar, byte_size(SoFar) - 1),
     parse_header(Rest, [{Name, Value}|Acc]);
-parse_hd_value(<< C, Rest/bits >>, Acc, Name, SoFar) ->
+parse_hd_value(<< C, Rest/binary >>, Acc, Name, SoFar) ->
     parse_hd_value(Rest, Acc, Name, << SoFar/binary, C >>).
 
 %% This function has been copied from cowboy_http.
@@ -112,6 +113,6 @@ clean_value_ws_end(Value, N) ->
         $\t -> clean_value_ws_end(Value, N - 1);
         _ ->
             S = N + 1,
-            << Value2:S/binary, _/bits >> = Value,
+            << Value2:S/binary, _/binary >> = Value,
             Value2
     end.

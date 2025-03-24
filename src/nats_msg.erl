@@ -77,6 +77,11 @@
                             ReplyTo :: iodata() | undefined,
                             Payload :: iodata()}}.
 
+-type hpub_param() :: {hpub, {Subject :: iodata(),
+                              ReplyTo :: iodata() | undefined,
+                              Header :: iodata(),
+                              Payload :: iodata()}}.
+
 -type sub_param() :: {sub, {Subject :: iodata(),
                             QueueGrp :: iodata() | undefined,
                             Sid :: iodata()}}.
@@ -89,10 +94,18 @@
                             ReplyTo :: iodata() | undefined,
                             Payload :: iodata()}}.
 
+-type hmsg_param() :: {hmsg, {Subject :: iodata(),
+                              Sid :: iodata(),
+                              ReplyTo :: iodata() | undefined,
+                              Header :: iodata(),
+                              Payload :: iodata()}}.
+
 -type encode_param() :: ping | pong | ok | error |
                         {info, iodata()} | {connect, iodata()} |
                         error_param() |
-                        pub_param() | sub_param() | unsub_param() | msg_param().
+                        pub_param() | hpub_param() |
+                        sub_param() | unsub_param() |
+                        msg_param() | hmsg_param().
 
 %% == API
 
@@ -161,24 +174,24 @@ encode({info, BinInfo}) -> [<<"INFO ">>, BinInfo, <<"\r\n">>];
 encode({connect, BinConnect}) -> [<<"CONNECT ">>, BinConnect, <<"\r\n">>];
 
 encode({pub, {Subject, undefined, Payload}}) ->
-    BinPS = integer_to_binary(iolist_size(Payload)),
+    BinPS = integer_to_binary(iodata_size(Payload)),
     [<<"PUB ">>, Subject, <<" ">>, BinPS, <<"\r\n">>,
      Payload, <<"\r\n">>];
 
 encode({pub, {Subject, ReplyTo, Payload}}) ->
-    BinPS = integer_to_binary(iolist_size(Payload)),
+    BinPS = integer_to_binary(iodata_size(Payload)),
     [<<"PUB ">>, Subject, <<" ">>, ReplyTo, <<" ">>, BinPS, <<"\r\n">>,
      Payload, <<"\r\n">>];
 
 encode({hpub, {Subject, undefined, Header, Payload}}) ->
-    BinHdrS = integer_to_binary(iolist_size(Header) + 2),
-    BinPS = integer_to_binary(iolist_size(Header) + 2 + iolist_size(Payload)),
+    BinHdrS = integer_to_binary(iodata_size(Header) + 2),
+    BinPS = integer_to_binary(iodata_size(Header) + 2 + iodata_size(Payload)),
     [<<"HPUB ">>, Subject, <<" ">>, BinHdrS, <<" ">>, BinPS, <<"\r\n">>,
      Header, <<"\r\n">>, Payload, <<"\r\n">>];
 
 encode({hpub, {Subject, ReplyTo, Header, Payload}}) ->
-    BinHdrS = integer_to_binary(iolist_size(Header) + 2),
-    BinPS = integer_to_binary(iolist_size(Header) + 2 + iolist_size(Payload)),
+    BinHdrS = integer_to_binary(iodata_size(Header) + 2),
+    BinPS = integer_to_binary(iodata_size(Header) + 2 + iodata_size(Payload)),
     [<<"HPUB ">>, Subject, <<" ">>, ReplyTo, <<" ">>, BinHdrS, <<" ">>, BinPS, <<"\r\n">>,
      Header, <<"\r\n">>, Payload, <<"\r\n">>];
 
@@ -196,24 +209,24 @@ encode({unsub, {Subject, MaxMsg}}) ->
     [<<"UNSUB ">>, Subject, <<" ">>, BinMaxMsg, <<"\r\n">>];
 
 encode({msg, {Subject, Sid, undefined, Payload}}) ->
-    BinPS = integer_to_binary(iolist_size(Payload)),
+    BinPS = integer_to_binary(iodata_size(Payload)),
     [<<"MSG ">>, Subject, <<" ">>, Sid, <<" ">>, BinPS, <<"\r\n">>,
      Payload, <<"\r\n">>];
 
 encode({msg, {Subject, Sid, ReplyTo, Payload}}) ->
-    BinPS = integer_to_binary(iolist_size(Payload)),
+    BinPS = integer_to_binary(iodata_size(Payload)),
     [<<"MSG ">>, Subject, <<" ">>, Sid, <<" ">>, ReplyTo, <<" ">>, BinPS, <<"\r\n">>,
      Payload, <<"\r\n">>];
 
 encode({hmsg, {Subject, Sid, undefined, Header, Payload}}) ->
-    BinHdrS = integer_to_binary(iolist_size(Header) + 2),
-    BinPS = integer_to_binary(iolist_size(Header) + 2 + iolist_size(Payload)),
+    BinHdrS = integer_to_binary(iodata_size(Header) + 2),
+    BinPS = integer_to_binary(iodata_size(Header) + 2 + iodata_size(Payload)),
     [<<"HMSG ">>, Subject, <<" ">>, Sid, <<" ">>, BinHdrS, <<" ">>, BinPS, <<"\r\n">>,
      Header, <<"\r\n">>, Payload, <<"\r\n">>];
 
 encode({hmsg, {Subject, Sid, ReplyTo, Header, Payload}}) ->
-    BinHdrS = integer_to_binary(iolist_size(Header) + 2),
-    BinPS = integer_to_binary(iolist_size(Header) + 2 + iolist_size(Payload)),
+    BinHdrS = integer_to_binary(iodata_size(Header) + 2),
+    BinPS = integer_to_binary(iodata_size(Header) + 2 + iodata_size(Payload)),
     [<<"HMSG ">>, Subject, <<" ">>, Sid, <<" ">>, ReplyTo, <<" ">>, BinHdrS, <<" ">>, BinPS, <<"\r\n">>,
      Header, <<"\r\n">>, Payload, <<"\r\n">>].
 
@@ -446,6 +459,11 @@ parts(<<" ", Rest/binary>>, Cnt, Acc) ->
     parts(Rest, 0, [Cnt | Acc]);
 parts(<<_:8, Rest/binary>>, Cnt, Acc) ->
     parts(Rest, Cnt + 1, Acc).
+
+iodata_size(List) when is_list(List) ->
+    iolist_size(List);
+iodata_size(Bin) when is_binary(Bin) ->
+    byte_size(Bin).
 
 %% upper_case(Bin) ->
 %%     list_to_binary(string:to_upper(binary_to_list(Bin))).
