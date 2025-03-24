@@ -36,14 +36,12 @@ jobs:
       run: rebar3 compile
     -
       name: Run tests
+      env:
+        OTP: ${{ matrix.otp }}
       run: |
            rebar3 xref
            rebar3 dialyzer
            rebar3 eunit
-    -
-      name: Tar Test Output
-      if: ${{ always() }}
-      run: tar -cf - _build/test/logs/ | zstd -15 -o ct-logs-${{ matrix.otp }}.tar.zst
     -
       name: Archive Test Output
       if: ${{ always() }}
@@ -51,8 +49,7 @@ jobs:
       with:
         name: test-output-${{ matrix.otp }}
         path: |
-          ct-logs-${{ matrix.otp }}.tar.zst
-          _build/test/logs/*/junit_report.xml
+          _logs/*/TEST*.xml
 
   publish-test-results:
     name: "Publish Tests Results"
@@ -74,7 +71,7 @@ jobs:
         name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2
         with:
-          files: "artifacts/**/junit_report.xml"
+          files: "artifacts/**/TEST*.xml"
 
   slack:
     needs: test
