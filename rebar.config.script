@@ -1,0 +1,8 @@
+%%-*-Erlang-*-
+case os:getenv("OTP") of
+    false -> CONFIG; % env var not defined
+    Dir ->
+        LogsDir = filename:join("_logs", Dir),
+        Opts = [{report, {eunit_surefire, [{dir, LogsDir}]}}],
+        lists:keystore(eunit_opts, 1, CONFIG, {eunit_opts, Opts})
+end.
