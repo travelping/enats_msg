@@ -29,7 +29,7 @@
 %% OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 -module(nats_hd).
-%-compile([bin_opt_info]).
+%% -compile([bin_opt_info]).
 
 -export([header/2, header/1, headers/1]).
 -export([parse_headers/1]).
@@ -52,7 +52,7 @@ header(Headers) ->
 
 -spec headers(headers()) -> iolist().
 headers(Headers) ->
-        [[N, ~": ", V, ?NL] || {N, V} <- Headers].
+    [[N, ~": ", V, ?NL] || {N, V} <- Headers].
 
 version() ->
     ~"NATS/1.0".
