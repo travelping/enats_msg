@@ -11,14 +11,22 @@ jobs:
     container:
       image: erlang:28.0-alpine
     steps:
-    - name: Prepare
+    -
+      name: Prepare
       run: |
            apk update
            apk --no-cache -u add git
-    - uses: actions/checkout@v4
-    - name: Publish to Hex.pm
+    -
+      name: git special configs
+      run: |
+          git config --global --add safe.directory /__w/enats_msg/enats_msg
+    -
+      name: Check out repository
+      uses: actions/checkout@v4
+    -
+      name: Publish to Hex.pm
       env:
         HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
       run: |
            rebar3 ex_doc
-           rebar3 hex publish -r hexpm --yes
+           rebar3 hex publish -r hexpm --yes --replace
