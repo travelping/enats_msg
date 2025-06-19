@@ -22,12 +22,11 @@ jobs:
         run: |
           apk --no-cache -u add git emacs-nox
       -
-        name: git special configs
-        run: |
-          git config --global --add safe.directory /__w/enats_msg/enats_msg
-      -
         name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
       -
         name: format
         run: rebar3 fmt
