@@ -13,7 +13,7 @@ on:
 jobs:
   code-style-review:
     runs-on: ubuntu-24.04
-    container: erlang:27.3-alpine
+    container: erlang:28.0-alpine
     env:
       ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:

@@ -64,14 +64,16 @@
 -define(NL, <<"\r\n">>).
 -define(SEPLIST, [<<" ">>, <<"\t">>]).
 
--type error_param() :: {error, unknown_operation} |
-                       {error, auth_violation} |
-                       {error, auth_timeout} |
-                       {error, parser_error} |
-                       {error, stale_connection} |
-                       {error, slow_consumer} |
-                       {error, max_payload} |
-                       {error, invalid_subject}.
+-type error_atom() :: unknown_operation |
+                      auth_violation |
+                      auth_timeout |
+                      parser_error |
+                      stale_connection |
+                      slow_consumer |
+                      max_payload |
+                      invalid_subject.
+
+-type error_param() :: {error, error_atom()}.
 
 -type pub_param() :: {pub, {Subject :: iodata(),
                             ReplyTo :: iodata() | undefined,
@@ -109,6 +111,10 @@
 
 %% == API
 
+-spec init() -> ok.
+-doc """
+Initializes the nats_msg module.
+""".
 init() ->
     put(nats_msg@nl, binary:compile_pattern(<<"\r\n">>)),
     put(nats_msg@sep, binary:compile_pattern(<<" ">>)),
@@ -116,48 +122,146 @@ init() ->
 
 %% == Encode API
 
+-spec ping() -> iolist().
+-doc """
+Encodes a PING keep-alive message.
+""".
 ping() -> encode(ping).
+
+-spec pong() -> iolist().
+-doc """
+Encodes a PONG keep-alive response.
+""".
 pong() -> encode(pong).
+
+-spec ok() -> iolist().
+-doc """
+Encodes a +OK acknowledgement message.
+""".
 ok() -> encode(ok).
+
+-spec err(Msg :: error_atom()) -> iolist().
+-doc """
+Encodes an -ERR message indicating a protocol error.
+""".
 err(Msg) -> encode({error, Msg}).
+
+-spec info(Info :: iodata()) -> iolist().
+-doc """
+Encodes an INFO message sent by the server to provide connection information.
+The argument is the JSON info payload.
+""".
 info(Info) -> encode({info, Info}).
+
+-spec connect(Info :: iodata()) -> iolist().
+-doc """
+Encodes a CONNECT message sent by the client to provide connection details and security information.
+The argument is the JSON connect options payload.
+""".
 connect(Info) -> encode({connect, Info}).
 
+-spec pub(Subject :: iodata()) -> iolist().
+-doc """
+Encodes a PUB message to publish data to a subject with an empty payload.
+""".
 pub(Subject) ->
     encode({pub, {Subject, undefined, <<>>}}).
+
+-spec pub(Subject :: iodata(), ReplyTo :: iodata() | undefined, Payload :: iodata()) -> iolist().
+-doc """
+Encodes a PUB message to publish data to a subject, optionally including a reply subject.
+""".
 pub(Subject, ReplyTo, Payload) ->
     encode({pub, {Subject, ReplyTo, Payload}}).
 
+-spec hpub(Subject :: iodata()) -> iolist().
+-doc """
+Encodes an HPUB message to publish data with headers to a subject with empty header and payload.
+""".
 hpub(Subject) ->
     encode({hpub, {Subject, undefined, <<>>, <<>>}}).
+
+-spec hpub(Subject :: iodata(), Header :: iodata(), Payload :: iodata()) -> iolist().
+-doc """
+Encodes an HPUB message to publish data with headers to a subject.
+""".
 hpub(Subject, Header, Payload) ->
     encode({hpub, {Subject, undefined, Header, Payload}}).
+
+-spec hpub(Subject :: iodata(), ReplyTo :: iodata() | undefined, Header :: iodata(), Payload :: iodata()) -> iolist().
+-doc """
+Encodes an HPUB message to publish data with headers to a subject, optionally including a reply subject.
+""".
 hpub(Subject, ReplyTo, Header, Payload) ->
     encode({hpub, {Subject, ReplyTo, Header, Payload}}).
 
+-spec sub(Subject :: iodata(), Sid :: iodata()) -> iolist().
+-doc """
+Encodes a SUB message to subscribe to a subject.
+""".
 sub(Subject, Sid) ->
     encode({sub, {Subject, undefined, Sid}}).
+
+-spec sub(Subject :: iodata(), QueueGrp :: iodata() | undefined, Sid :: iodata()) -> iolist().
+-doc """
+Encodes a SUB message to subscribe to a subject, optionally joining a queue group.
+""".
 sub(Subject, QueueGrp, Sid) ->
     encode({sub, {Subject, QueueGrp, Sid}}).
 
+-spec unsub(Sid :: iodata()) -> iolist().
+-doc """
+Encodes an UNSUB message to unsubscribe from a subject.
+""".
 unsub(Sid) ->
     encode({unsub, {Sid, undefined}}).
+
+-spec unsub(Sid :: iodata(), MaxMsg :: integer() | undefined) -> iolist().
+-doc """
+Encodes an UNSUB message to unsubscribe from a subject after a certain number of messages.
+""".
 unsub(Sid, MaxMsg) ->
     encode({unsub, {Sid, MaxMsg}}).
 
+-spec msg(Subject :: iodata(), Sid :: iodata()) -> iolist().
+-doc """
+Encodes a MSG message with no reply-to and empty payload.
+""".
 msg(Subject, Sid) ->
     encode({msg, {Subject, Sid, undefined, <<>>}}).
+
+-spec msg(Subject :: iodata(), Sid :: iodata(), ReplyTo :: iodata() | undefined, Payload :: iodata()) -> iolist().
+-doc """
+Encodes a MSG message.
+""".
 msg(Subject, Sid, ReplyTo, Payload) ->
     encode({msg, {Subject, Sid, ReplyTo, Payload}}).
 
+-spec hmsg(Subject :: iodata(), Sid :: iodata()) -> iolist().
+-doc """
+Encodes an HMSG message with no reply-to, empty header, and empty payload.
+""".
 hmsg(Subject, Sid) ->
-    encode({hmsg, {Subject, Sid, undefined, <<>>}}).
+    encode({hmsg, {Subject, Sid, undefined, <<>>, <<>>}}).
+
+-spec hmsg(Subject :: iodata(), Sid :: iodata(), Header :: iodata(), Payload :: iodata()) -> iolist().
+-doc """
+Encodes an HMSG message with no reply-to.
+""".
 hmsg(Subject, Sid, Header, Payload) ->
     encode({hmsg, {Subject, Sid, undefined, Header, Payload}}).
+
+-spec hmsg(Subject :: iodata(), Sid :: iodata(), ReplyTo :: iodata() | undefined, Header :: iodata(), Payload :: iodata()) -> iolist().
+-doc """
+Encodes an HMSG message.
+""".
 hmsg(Subject, Sid, ReplyTo, Header, Payload) ->
     encode({hmsg, {Subject, Sid, ReplyTo, Header, Payload}}).
 
 -spec encode(Param :: encode_param()) -> iolist().
+-doc """
+Encodes an Erlang term representing a NATS protocol message into an iolist suitable for sending over the wire.
+""".
 
 encode(ping) -> <<"PING\r\n">>;
 encode(pong) -> <<"PONG\r\n">>;
@@ -232,6 +336,26 @@ encode({hmsg, {Subject, Sid, ReplyTo, Header, Payload}}) ->
 
 %% == Decode API
 
+-spec decode_all(Bin :: iodata()) -> {list(), binary()}.
+-doc """
+Decodes all complete NATS protocol messages found in the input binary.
+Returns a list of decoded messages and any remaining binary data.
+""".
+decode_all(Bin) ->
+    decode(Bin, {fun decode_all_msg_fun/2, []}).
+
+-spec decode(Param :: iodata()) ->
+          {term(), binary()}.
+-doc """
+Decodes a binary or iolist containing NATS protocol messages.
+Stops after the first complete message is decoded.
+Returns the decoded message term and any remaining binary data.
+""".
+decode(L) when is_list(L) ->
+    decode(iolist_to_binary(L));
+decode(Bin) when is_binary(Bin) ->
+    decode(Bin, {fun decode_single_msg_fun/2, []}).
+
 decode_single_msg_fun(stop, State) ->
     {stop, State};
 decode_single_msg_fun(Ev, _) ->
@@ -241,17 +365,6 @@ decode_all_msg_fun(stop, Acc) ->
     {stop, lists:reverse(Acc)};
 decode_all_msg_fun(Ev, Acc) ->
     {continue, [Ev|Acc]}.
-
-decode_all(Bin) ->
-    decode(Bin, {fun decode_all_msg_fun/2, []}).
-
--spec decode(Param :: iodata()) ->
-          {term(), binary()}.
-
-decode(L) when is_list(L) ->
-    decode(iolist_to_binary(L));
-decode(Bin) when is_binary(Bin) ->
-    decode(Bin, {fun decode_single_msg_fun/2, []}).
 
 return(<<Rest/binary>>, State) ->
     {State, Rest}.
@@ -264,6 +377,12 @@ decode_cont(<<Rest/binary>>, {CbFun, CbState}, Ev) ->
             decode(Rest, {CbFun, NextState})
     end.
 
+-spec decode(Bin :: iodata(), CbFunState :: {function(), term()}) -> {term(), binary()}.
+-doc """
+Decodes a binary or iolist containing NATS protocol messages using a callback function to handle decoded events.
+The callback function is called with `(Event, State)` and should return `{continue, NewState}` or `{stop, FinalState}`.
+Returns the final state returned by the callback and any remaining binary data.
+""".
 decode(<<_:0/binary>>, CbFunState) ->
     decode_cont(<<>>, CbFunState, stop);
 decode(<<"+OK\r\n", Rest/binary>>, CbFunState) ->
