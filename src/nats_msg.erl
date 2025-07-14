@@ -32,6 +32,7 @@
 -module(nats_msg).
 -author("Yuce Tekol").
 %% -compile([bin_opt_info]).
+-compile({no_auto_import, [get/1]}).
 
 -export([init/0,
          encode/1,
@@ -59,6 +60,7 @@
          hmsg/2,
          hmsg/4,
          hmsg/5]).
+-export([js_metadata/1]).
 
 -define(SEP, <<" ">>).
 -define(NL, <<"\r\n">>).
@@ -116,9 +118,21 @@
 Initializes the nats_msg module.
 """.
 init() ->
-    put(nats_msg@nl, binary:compile_pattern(<<"\r\n">>)),
-    put(nats_msg@sep, binary:compile_pattern(<<" ">>)),
+    lists:foreach(fun get/1, [nats_msg@nl, nats_msg@sep, nats_msg@topic]),
     ok.
+
+init(nats_msg@nl) -> binary:compile_pattern(<<"\r\n">>);
+init(nats_msg@sep) -> binary:compile_pattern(<<" ">>);
+init(nats_msg@topic) -> binary:compile_pattern(<<".">>).
+
+get(Key) ->
+    try persistent_term:get({?MODULE, Key})
+    catch
+        error:badarg ->
+            Value = init(Key),
+            persistent_term:put({?MODULE, Key}, Value),
+            Value
+    end.
 
 %% == Encode API
 
@@ -584,6 +598,46 @@ iodata_size(List) when is_list(List) ->
 iodata_size(Bin) when is_binary(Bin) ->
     byte_size(Bin).
 
+%% == reply metadata
+
+js_metadata(<<"$JS.ACK.", Topic/binary>>) ->
+    ack_metadata(binary:split(Topic, get(nats_msg@topic), [global]));
+js_metadata(_) ->
+    {error, invalid_subject_format}.
+
+ack_metadata([Stream, Consumer, Delivered, SSeq, CSeq, TM, Pending]) ->
+    %% Subject without domain:
+    %% $JS.ACK.<stream>.<consumer>.<delivered>.<sseq>.<cseq>.<tm>.<pending>
+    Meta = #{stream_seq => binary_to_integer(SSeq),
+             consumer_seq => binary_to_integer(CSeq),
+             num_delivered => binary_to_integer(Delivered),
+             num_pending => binary_to_integer(Pending),
+             timestamp => binary_to_integer(TM),
+             stream => Stream,
+             consumer => Consumer},
+    {ok, Meta};
+ack_metadata([Domain, Hash, Stream, Consumer, Delivered, SSeq, CSeq, TM, Pending | _]) ->
+    %% New subject with domain
+    %% $JS.ACK.<domain>.<account hash>.<stream>.<consumer>.<delivered>.<sseq>.<cseq>.<tm>.<pending>.<a token with a random value>
+    %% the last field, token, might be removed in the future is not used
+    Meta =
+        #{hash => Hash,
+          stream_seq => binary_to_integer(SSeq),
+          consumer_seq => binary_to_integer(CSeq),
+          num_delivered => binary_to_integer(Delivered),
+          num_pending => binary_to_integer(Pending),
+          timestamp => binary_to_integer(TM),
+          stream => Stream,
+          consumer => Consumer},
+    case Domain of
+        ~"_" ->
+            {ok, Meta};
+        _ ->
+            {ok, Meta#{domain => Domain}}
+    end;
+ack_metadata(_) ->
+    {error, invalid_subject_format}.
+
 %% upper_case(Bin) ->
 %%     list_to_binary(string:to_upper(binary_to_list(Bin))).
 
@@ -841,5 +895,46 @@ decode_encode_1_test() ->
     io:format("R1: ~p~n", [R1]),
     R2 = iolist_to_binary(encode(R1)),
     ?assertEqual(E, R2).
+
+%% == JS metadata
+
+decode_v1_metadata_test() ->
+    Want = #{stream => <<"KV_ERGW_SESSIONS">>,
+             timestamp => 1747382905538829661,
+             stream_seq => 33312,
+             consumer_seq => 2,
+             num_delivered => 1,
+             num_pending => 1,
+             consumer => <<"80KyLl05">>},
+    {ok, V1} = nats_msg:js_metadata(~"$JS.ACK.KV_ERGW_SESSIONS.80KyLl05.1.33312.2.1747382905538829661.1"),
+    ?assertEqual(Want, V1).
+
+decode_v2_metadata_test() ->
+    Want1 = #{stream => <<"KV_ERGW_SESSIONS">>,
+              timestamp => 1747382905538829661,
+              stream_seq => 33312,
+              consumer_seq => 2,
+              num_delivered => 1,
+              num_pending => 1,
+              consumer => <<"80KyLl05">>,
+              domain => <<"DOMAIN">>,
+              hash => <<"HASH">>},
+    {ok, V2_1} = nats_msg:js_metadata(~"$JS.ACK.DOMAIN.HASH.KV_ERGW_SESSIONS.80KyLl05.1.33312.2.1747382905538829661.1"),
+    ?assertEqual(Want1, V2_1),
+    {ok, V2_2} = nats_msg:js_metadata(~"$JS.ACK.DOMAIN.HASH.KV_ERGW_SESSIONS.80KyLl05.1.33312.2.1747382905538829661.1.TOKEN"),
+    ?assertEqual(Want1, V2_2),
+
+    Want2 = #{stream => <<"KV_ERGW_SESSIONS">>,
+              timestamp => 1747382905538829661,
+              stream_seq => 33312,
+              consumer_seq => 2,
+              num_delivered => 1,
+              num_pending => 1,
+              consumer => <<"80KyLl05">>,
+              hash => <<"HASH">>},
+    {ok, V2_3} = nats_msg:js_metadata(~"$JS.ACK._.HASH.KV_ERGW_SESSIONS.80KyLl05.1.33312.2.1747382905538829661.1"),
+    ?assertEqual(Want2, V2_3),
+    {ok, V2_4} = nats_msg:js_metadata(~"$JS.ACK._.HASH.KV_ERGW_SESSIONS.80KyLl05.1.33312.2.1747382905538829661.1.TOKEN"),
+    ?assertEqual(Want2, V2_4).
 
 -endif.
